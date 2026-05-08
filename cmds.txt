@@ -1,0 +1,15 @@
+# Build the Vulkan containers
+docker compose build
+docker compose up -d
+
+docker logs llama-reasoning | grep Vulkan
+
+To switch from Qwen3 to Gemma or the Coder model:
+
+Open .env and change ACTIVE_MODEL_FILENAME=gemma-4.gguf.
+Run docker compose restart llama-reasoning. (No rebuilds required, and Open WebUI automatically maps requests via LiteLLM!)
+
+
+Open WebUI: http://localhost:3000
+LiteLLM Gateway: http://localhost:4000
+Raw Llama API: http://localhost:8080 (Reasoning) & http://localhost:8081 (Embeddings)

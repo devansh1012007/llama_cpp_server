@@ -1,0 +1,88 @@
+services:
+  llama-reasoning:
+    build:
+      context: ./llama
+    container_name: llama-reasoning
+    restart: unless-stopped
+    shm_size: "10gb"
+    devices:
+      - /dev/dri:/dev/dri # Enables AMD Vulkan passthrough
+    device_cgroup_rules:
+      - 'c 226:* rmw'
+    group_add:
+      - "39" # video
+      - "105" # render
+    volumes:
+      - ./models:/models:ro
+      - ./scripts:/scripts:ro
+    ports:
+      - "8082:8080" # Exposed on LAN for direct access (host:8082 -> container:8080)
+    env_file:
+      - .env
+    entrypoint: [ "/bin/bash", "/scripts/start-llama.sh", "reasoning" ]
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  llama-embedding:
+    build:
+      context: ./llama
+    container_name: llama-embedding
+    restart: unless-stopped
+    devices:
+      - /dev/dri:/dev/dri # Enables AMD Vulkan passthrough
+    volumes:
+      - ./models:/models:ro
+      - ./scripts:/scripts:ro
+    device_cgroup_rules:
+      - 'c 226:* rmw'
+    ports:
+      - "8081:8081"
+    env_file:
+      - .env
+    group_add:
+      - "39" # video
+      - "105" # render
+    entrypoint: [ "/bin/bash", "/scripts/start-llama.sh", "embedding" ]
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8081/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      llama-reasoning:
+        condition: service_healthy
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm
+    restart: unless-stopped
+    volumes:
+      - ./configs/litellm/config.yaml:/app/config.yaml:ro
+    ports:
+      - "4000:4000" # Expose LiteLLM for remote API usage
+    command: [ "--config", "/app/config.yaml", "--detailed_debug" ]
+    depends_on:
+      llama-reasoning:
+        condition: service_healthy
+      llama-embedding:
+        condition: service_healthy
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    ports:
+      - "3000:8080" # Maps to 3000 on host
+    volumes:
+      - ./data/open-webui:/app/backend/data
+    environment:
+      - OPENAI_API_BASE_URL=http://litellm:4000/v1
+      - OPENAI_API_KEY=sk-1234
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      - ENABLE_RAG_WEB_SEARCH=False
+    depends_on:
+      - litellm
+

@@ -1,0 +1,6 @@
+models/
+vector_db/
+*.db
+*.log
+*.cache
+chche/
